@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import os
 import gradio as gr
 import requests
 import inspect
 import pandas as pd
+from agent import build_graph
 
 # (Keep Constants as is)
 # --- Constants ---
@@ -11,13 +14,51 @@ DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 # --- Basic Agent Definition ---
 # ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
 class BasicAgent:
-    def __init__(self):
-        print("BasicAgent initialized.")
+    def __init__(self, provider="openai", model_name="gpt-4.1-2025-04-14"):
+        """Initialize the BasicAgent with the specified LLM provider and model.
+        
+        Args:
+            provider: The LLM provider to use ('openai', 'google', etc.)
+            model_name: The specific model name to use
+        """
+        print(f"Initializing BasicAgent with {provider} model: {model_name}")
+        self.agent_executor = build_graph(provider=provider, model_name=model_name)
+        
     def __call__(self, question: str) -> str:
-        print(f"Agent received question (first 50 chars): {question[:50]}...")
-        fixed_answer = "This is a default answer."
-        print(f"Agent returning fixed answer: {fixed_answer}")
-        return fixed_answer
+        """Process a question through the agent and return the answer.
+        
+        Args:
+            question: The question to answer
+            
+        Returns:
+            The agent's response
+        """
+        from langchain_core.messages import HumanMessage
+        
+        print(f"Agent received question (first 200 chars): {question[:200]}...")
+        
+        # Prepare the input for the agent
+        messages = [HumanMessage(content=question)]
+        
+        # Execute the agent
+        try:
+            result = self.agent_executor.invoke({"messages": messages})
+            
+            # Extract the final answer from the last message
+            final_message = result["messages"][-1]
+            answer = final_message.content
+            
+            # If the answer contains "FINAL ANSWER:", extract just that part
+            if "FINAL ANSWER:" in answer:
+                answer = answer.split("FINAL ANSWER:")[1].strip()
+                
+            print(f"Agent returning answer (first 200 chars): {answer[:200]}...")
+            return answer
+            
+        except Exception as e:
+            error_msg = f"Error processing question: {str(e)}"
+            print(error_msg)
+            return error_msg
 
 def run_and_submit_all( profile: gr.OAuthProfile | None):
     """
@@ -40,7 +81,7 @@ def run_and_submit_all( profile: gr.OAuthProfile | None):
 
     # 1. Instantiate Agent ( modify this part to create your agent)
     try:
-        agent = BasicAgent()
+        agent = BasicAgent(provider="openai", model_name="gpt-4.1-2025-04-14")
     except Exception as e:
         print(f"Error instantiating agent: {e}")
         return f"Error initializing agent: {e}", None
