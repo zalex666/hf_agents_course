@@ -1,3 +1,4 @@
 .env
 .gitignore
 .cursor/rules/
+chroma_db/
