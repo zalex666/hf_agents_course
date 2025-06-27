@@ -14,15 +14,25 @@ DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
 # --- Basic Agent Definition ---
 # ----- THIS IS WERE YOU CAN BUILD WHAT YOU WANT ------
 class BasicAgent:
-    def __init__(self, provider="openai", model_name="gpt-4.1-2025-04-14"):
-        """Initialize the BasicAgent with the specified LLM provider and model.
-        
-        Args:
-            provider: The LLM provider to use ('openai', 'google', etc.)
-            model_name: The specific model name to use
-        """
+    """Thin wrapper around the compiled LangGraph agent.
+
+    Added optional *debug* mode that streams every intermediate LangGraph
+    state to stdout and attaches LangSmith tags for easier filtering in the
+    UI.  If the environment variable ``LANGSMITH_TRACING`` is set to ``true``
+    (already provided in the project) all calls are automatically logged in
+    the LangSmith project defined by ``LANGSMITH_PROJECT``.
+    """
+
+    def __init__(
+        self,
+        provider: str = "openai",
+        model_name: str = "gpt-4.1-2025-04-14",
+        *,
+        debug: bool = False,
+    ) -> None:
         print(f"Initializing BasicAgent with {provider} model: {model_name}")
         self.agent_executor = build_graph(provider=provider, model_name=model_name)
+        self._debug = debug
         
     def __call__(self, question: str) -> str:
         """Process a question through the agent and return the answer.
@@ -35,17 +45,36 @@ class BasicAgent:
         """
         from langchain_core.messages import HumanMessage
         
-        print(f"Agent received question (first 200 chars): {question[:200]}...")
-        
         # Prepare the input for the agent
         messages = [HumanMessage(content=question)]
         
         # Execute the agent
         try:
-            result = self.agent_executor.invoke({"messages": messages})
+            # Common runnable config shared by both *invoke* and *stream* paths.
+            # Attaches useful tags that will be visible in LangSmith.
+            runnable_cfg = {
+                "recursion_limit": 100,
+                # Useful when querying traces later:
+                "tags": ["basic_agent"],
+            }
+
+            if self._debug:
+                # Stream every state change and print to stdout for local debugging.
+                final_state = None
+                for step in self.agent_executor.stream({"messages": messages}, config=runnable_cfg):
+                    # Minimal, but you could pretty-print or log JSON here as needed.
+                    print("[LangGraph step]", step)
+                    final_state = step
+
+                if not final_state:
+                    raise RuntimeError("Agent produced no output in debug stream mode.")
+
+                final_message = final_state["messages"][-1]
+            else:
+                # Standard single-call execution path.
+                result = self.agent_executor.invoke({"messages": messages}, config=runnable_cfg)
+                final_message = result["messages"][-1]
             
-            # Extract the final answer from the last message
-            final_message = result["messages"][-1]
             answer = final_message.content
             
             # If the answer contains "FINAL ANSWER:", extract just that part

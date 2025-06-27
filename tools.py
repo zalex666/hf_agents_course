@@ -1,14 +1,18 @@
+import warnings
+from bs4 import GuessedAtParserWarning
+warnings.filterwarnings("ignore", category=GuessedAtParserWarning)
+
 import os
 from pathlib import Path
 import json
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_community.document_loaders import WikipediaLoader, ArxivLoader
 from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 from langchain.tools.retriever import create_retriever_tool
+from langchain_tavily import TavilySearch
 
 # -----------------------------------------------------------------------------
 # Environment setup
@@ -157,7 +161,7 @@ def web_search(query: str) -> dict[str, str]:
         A mapping with a single key ``"web_results"`` containing a string of
         concatenated document data separated by ``---`` blocks.
     """
-    search_docs = TavilySearchResults(max_results=3).invoke(query=query)
+    search_docs = TavilySearch(max_results=3).invoke(query)
     formatted = "\n\n---\n\n".join(
         [
             (
